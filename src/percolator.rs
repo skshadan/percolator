@@ -1,11 +1,11 @@
-//! Formally Verified Risk Engine for Perpetual DEX
+//! Risk Engine for Perpetual DEX
 //!
 //! ⚠️ EDUCATIONAL USE ONLY - NOT PRODUCTION READY ⚠️
 //!
 //! This is an experimental research project for educational purposes only.
 //! DO NOT use with real funds. Not independently audited. Not production ready.
 //!
-//! This module implements a formally verified risk engine that guarantees:
+//! This module implements a risk engine that guarantees:
 //! 1. User funds are safe against oracle manipulation attacks (within time window T)
 //! 2. PNL warmup prevents instant withdrawal of manipulated profits
 //! 3. ADL haircuts apply to unwrapped PNL first, protecting user principal
@@ -18,22 +18,16 @@
 #![no_std]
 #![forbid(unsafe_code)]
 
-#[cfg(kani)]
-extern crate kani;
-
 // ============================================================================
 // Constants
 // ============================================================================
 
 // MAX_ACCOUNTS is feature-configured, not target-configured.
 // This ensures x86 and SBF builds use the same sizes for a given feature set.
-#[cfg(kani)]
-pub const MAX_ACCOUNTS: usize = 4; // Small for fast formal verification (1 bitmap word, 4 bits)
-
-#[cfg(all(feature = "test", not(kani)))]
+#[cfg(feature = "test")]
 pub const MAX_ACCOUNTS: usize = 64; // Small for tests
 
-#[cfg(all(not(kani), not(feature = "test")))]
+#[cfg(not(feature = "test"))]
 pub const MAX_ACCOUNTS: usize = 4096; // Production
 
 // Derived constants - all use size_of, no hardcoded values
@@ -823,7 +817,7 @@ impl RiskEngine {
             self.c_tot.get(),
             self.insurance_fund.balance.get(),
         );
-        // Kani proves solvent == true always; clamp as defense-in-depth.
+        // Clamp as defense-in-depth.
         let residual_u = if solvent { residual } else { 0 };
         let h_num = core::cmp::min(residual_u, pnl_pos_tot);
         (h_num, pnl_pos_tot)
@@ -1251,8 +1245,8 @@ impl RiskEngine {
     }
 
     /// Add fee credits without vault/insurance accounting.
-    /// Only for tests and Kani proofs — production code must use deposit_fee_credits.
-    #[cfg(any(test, feature = "test", kani))]
+    /// Only for tests — production code must use deposit_fee_credits.
+    #[cfg(any(test, feature = "test"))]
     pub fn add_fee_credits(&mut self, idx: u16, amount: u128) -> Result<()> {
         if idx as usize >= MAX_ACCOUNTS || !self.is_used(idx as usize) {
             return Err(RiskError::Unauthorized);
@@ -2095,7 +2089,7 @@ impl RiskEngine {
         };
 
         // Verify slope >= 1 when available PnL exists
-        #[cfg(any(test, kani))]
+        #[cfg(test)]
         debug_assert!(
             slope >= 1 || avail_gross == 0,
             "Warmup slope bug: slope {} with avail_gross {}",
@@ -2571,7 +2565,7 @@ impl RiskEngine {
         }
 
         // Regression assert: after settle + withdraw, negative PnL should have been settled
-        #[cfg(any(test, kani))]
+        #[cfg(test)]
         debug_assert!(
             !self.accounts[idx as usize].pnl.is_negative()
                 || self.accounts[idx as usize].capital.is_zero(),
